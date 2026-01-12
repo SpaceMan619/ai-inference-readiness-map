@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import pydeck as pdk
 
 # --------------------
 # Page config
@@ -22,40 +22,15 @@ st.caption(
 df = pd.read_csv("data/ai_inference_readiness_africa_v0.csv")
 
 # --------------------
-# Map readiness to numeric scale (for colors)
+# Map readiness to colors
 # --------------------
-readiness_map = {
-    "Viable": 3,
-    "Emerging": 2,
-    "Emerging (Early)": 1
+color_map = {
+    "Viable": [26, 150, 65],
+    "Emerging": [253, 174, 97],
+    "Emerging (Early)": [215, 25, 28],
 }
-df["readiness_score"] = df["ai_inference_readiness"].map(readiness_map)
 
-# --------------------
-# Africa choropleth map
-# --------------------
-fig = px.choropleth(
-    df,
-    locations="country",
-    locationmode="country names",
-    color="readiness_score",
-    hover_name="country",
-    color_continuous_scale=["#d7191c", "#fdae61", "#1a9641"],
-    range_color=(1, 3),
-)
-
-fig.update_layout(
-    margin=dict(l=0, r=0, t=0, b=0),
-    coloraxis_colorbar=dict(
-        title="AI Inference Readiness",
-        tickvals=[1, 2, 3],
-        ticktext=["Emerging (Early)", "Emerging", "Viable"]
-    )
-)
-
-st.plotly_chart(fig, use_container_width=True)
-
-st.markdown("---")
+df["color"] = df["ai_inference_readiness"].map(color_map)
 
 # --------------------
 # Country detail panel
@@ -64,7 +39,61 @@ st.subheader("Country-level AI inference details")
 
 selected_country = st.selectbox(
     "Select a country:",
-    df["country"].unique()
+    sorted(df["country"].unique()),
+    index=0
+)
+
+# --------------------
+# Africa map (DOTS – PyDeck)
+# --------------------
+st.subheader("AI Inference Readiness — Geographic View")
+
+MAPBOX_TOKEN = st.secrets["MAPBOX_TOKEN"]
+
+# --------------------
+# Dynamic view state (cinematic zoom)
+# --------------------
+if selected_country:
+    selected_row = df[df["country"] == selected_country].iloc[0]
+
+    view_state = pdk.ViewState(
+        latitude=selected_row["latitude"],
+        longitude=selected_row["longitude"],
+        zoom=4.5,
+        transition_duration=1200,
+    )
+else:
+    view_state = pdk.ViewState(
+        latitude=0,
+        longitude=20,
+        zoom=2.5,
+    )
+
+layer = pdk.Layer(
+    "ScatterplotLayer",
+    data=df,
+    get_position=["longitude", "latitude"],
+    get_color="color",
+    get_radius=180000,
+    pickable=True,
+)
+
+st.pydeck_chart(
+    pdk.Deck(
+        map_style="mapbox://styles/mapbox/light-v11",
+        api_keys={"mapbox": MAPBOX_TOKEN},
+        layers=[layer],
+        initial_view_state=view_state,
+        tooltip={
+            "html": "<b>{country}</b><br/>Readiness: {ai_inference_readiness}",
+            "style": {
+                "backgroundColor": "rgba(255,255,255,0.95)",
+                "color": "black",
+                "border": "1px solid #ddd",
+            },
+        },
+    ),
+    use_container_width=True,
 )
 
 country = df[df["country"] == selected_country].iloc[0]
