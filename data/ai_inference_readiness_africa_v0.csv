@@ -1,0 +1,8 @@
+country,region,ai_inference_readiness,active_data_centers,dc_pipeline,ai_compute_availability,cloud_maturity,connectivity_role,power_reliability,ops_friction,data_residency_constraint,founder_insight
+South Africa,Southern Africa,Viable,"15-25",Under construction,GPU available,Region,Continental hub,"Medium (High Cost)",Low,"No / Sector-specific","Most mature AI inference location in Africa, often serving as a regional fallback despite power constraints."
+Nigeria,West Africa,Emerging,"10-15",Under construction,Limited GPU,Local Zone,Regional hub,Low-Medium,Medium,Unclear,"Strong demand and rapid data center growth, but power reliability and operational friction still make AI inference fragile."
+Kenya,East Africa,Emerging,"5-8",Under construction,Limited GPU,Local Zone,East Africa hub,Medium,Medium,Unclear,"Strong connectivity and cloud presence enable AI inference, but local AI compute depth remains thin."
+Egypt,North Africa,Viable,"8-12",Under construction,GPU available,Local Zone,Subsea gateway,Medium-High,Medium,Yes,"Strong connectivity and growing AI compute make Egypt viable for inference, with data sovereignty shaping deployment choices."
+Morocco,North Africa,Emerging,"4-6",Planned,Limited GPU,PoP,Europe-adjacent,Medium-High,Medium,Unclear,"Often served via EU regions; local AI compute depth remains limited."
+Ghana,West Africa,Emerging,"3-5",Planned,CPU-focused,PoP,Regional,Medium,Medium,Unclear,"Stable environment, but scalable AI inference often relies on offshore compute."
+Rwanda,East Africa,Emerging (Early),"1-2",Planned,CPU-focused,PoP,Regional,Medium,Medium,Unclear,"Strong policy ambition, but AI inference today depends on regional or offshore infrastructure."
