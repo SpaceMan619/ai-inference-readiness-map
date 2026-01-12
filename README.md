@@ -87,3 +87,18 @@ streamlit run app.py
 Then open:
 http://localhost:8501
 
+
+## Versions
+
+- **v0** — Streamlit prototype
+  - Dot-based map
+  - Founder-facing AI inference readiness
+  - Directional data + qualitative insights
+  - Purpose: validate framing and deployment
+
+- **v1 (planned)** — Deeper inference realism
+  - Latency bands
+  - Offshore vs local inference paths
+  - Same data model, richer reasoning
+  - More data
+  - Huge UI overhaul 
