@@ -86,8 +86,7 @@ streamlit run app.py
 
 Then open:
 http://localhost:8501
-
-
+```
 ## Versions
 
 - **v0** — Streamlit prototype
@@ -102,3 +101,4 @@ http://localhost:8501
   - Same data model, richer reasoning
   - More data
   - Huge UI overhaul 
+
