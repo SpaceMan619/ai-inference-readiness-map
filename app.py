@@ -142,6 +142,15 @@ st.markdown("""
     .badge-viable {background-color: #dcfce7; color: #166534;}
     .badge-emerging {background-color: #fef3c7; color: #92400e;}
     .badge-early {background-color: #fee2e2; color: #991b1b;}
+    .badge-strong {background-color: #1e40af; color: #eff6ff;} /* Deep Blue for Policy */
+    .badge-unclear {background-color: #9ca3af; color: #f3f4f6;} 
+    
+    /* Mode Toggle Container */
+    .mode-toggle-container {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -152,40 +161,87 @@ st.markdown("""
 def load_data():
     try:
         df = pd.read_csv("data/ai_inference_readiness_africa_v0.csv")
-        
+        # Clean column names to avoid KeyErrors from trailing spaces
+        df.columns = df.columns.str.strip()
+
         # 1. Sanitize Coordinates
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
         df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
         df = df.dropna(subset=['latitude', 'longitude'])
 
-        # 2. Base Colors (RGB)
-        base_colors = {
+        # ---------------------------
+        # FALLBACK FOR MISSING V2 DATA
+        # ---------------------------
+        # Ensure v2 columns exist even if CSV is outdated, to prevent app crash
+        v2_defaults = {
+            'ai_policy_signal': 'Unclear',
+            'ai_data_governance_posture': 'Unclear',
+            'ai_compute_policy_commitment': 'Absent',
+            'cross_border_ai_alignment': 'Unclear'
+        }
+        for col, default_val in v2_defaults.items():
+            if col not in df.columns:
+                df[col] = default_val
+
+        # ---------------------------
+        # FALLBACK FOR MISSING FOUNDER DATA (non-destructive)
+        # ---------------------------
+        founder_defaults = {
+            'primary_inference_route': 'Unclear',
+            'ai_compute_availability': 'Unclear',
+            'power_reliability': 'Unclear',
+            'cloud_maturity': 'Unclear',
+            'ops_friction': 'Unclear',
+            'founder_insight': 'Founder insight pending.',
+        }
+        for col, default_val in founder_defaults.items():
+            if col not in df.columns:
+                df[col] = default_val
+            else:
+                df[col] = df[col].fillna(default_val)
+
+        # ---------------------------
+        # COLOR MAPPING LOGIC
+        # ---------------------------
+        # 1. Founder Mode Colors (Readiness)
+        founder_colors = {
             "Viable": [26, 150, 65],      # Green
             "Emerging": [253, 174, 97],   # Orange
             "Emerging (Early)": [215, 25, 28], # Red
         }
-        
-        # 3. Opacity
-        opacities = {
-            "Viable": 230, "Emerging": 190, "Emerging (Early)": 150,
+        # 2. Policy Mode Colors (Signal) - DIFFERENT PALETTE (Blues/Purples)
+        policy_colors = {
+            "Strong": [30, 64, 175],      # Strong Blue
+            "Emerging": [96, 165, 250],   # Light Blue
+            "Unclear": [156, 163, 175],   # Gray
         }
+        # 3. Opacity
+        opacities = {"Viable": 230, "Emerging": 190, "Emerging (Early)": 150}
 
-        def get_rgba(readiness):
-            rgb = base_colors.get(readiness, [128, 128, 128])
+        def get_founder_rgba(readiness):
+            rgb = founder_colors.get(readiness, [128, 128, 128])
             alpha = opacities.get(readiness, 150)
             return rgb + [alpha]
 
-        df["color"] = df["ai_inference_readiness"].apply(get_rgba)
-        
+        def get_policy_rgba(signal):
+            rgb = policy_colors.get(signal, [128, 128, 128])
+            # Policy mode: Make strong signals more opaque
+            alpha = 240 if signal == "Strong" else (180 if signal == "Emerging" else 100)
+            return rgb + [alpha]
+
+        df["color_founder"] = df["ai_inference_readiness"].apply(get_founder_rgba)
+        df["color_policy"] = df["ai_policy_signal"].apply(get_policy_rgba)
         # 4. Radius Mapping
-        radius_map = {
-            "Viable": 220000, "Emerging": 170000, "Emerging (Early)": 130000,
-        }
+        radius_map = {"Viable": 220000, "Emerging": 170000, "Emerging (Early)": 130000}
         df["radius"] = df["ai_inference_readiness"].map(radius_map).fillna(120000)
-        
         return df
     except FileNotFoundError:
         return None
+import numpy as np
+
+def safe(val, fallback="Unclear"):
+    import pandas as pd
+    return val if pd.notna(val) and str(val).strip() != "" else fallback
 
 df = load_data()
 
@@ -200,15 +256,24 @@ if 'selected_country' not in st.session_state:
     st.session_state.selected_country = sorted(df["country"].unique())[0]
 
 # --------------------
-# 5. Header & Metrics
+# 5. Header & Mode Switch
 # --------------------
-st.title("AI Inference Flow Map — Africa (v1)")
+st.title("AI Inference Flow Map — Africa (v2)")
 st.caption("Visual decision-support tool for AI inference paths (local, regional, offshore).")
 
-# Top Level Metrics
-viable_mkts = len(df[df['ai_inference_readiness'] == 'Viable'])
-gpu_mkts = len(df[df['ai_compute_availability'].str.contains('GPU', case=False, na=False)])
+# Mode Toggle
+col_mode_spacer, col_mode, col_mode_spacer2 = st.columns([3, 2, 3])
+with col_mode:
+    view_mode = st.radio(
+        "Layer View:",
+        ["Founder Mode", "Policy Mode"],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
 
+is_policy_mode = view_mode == "Policy Mode"
+
+# Top Level Metrics - DYNAMIC based on mode
 m1, m2, m3 = st.columns(3)
 
 def render_summary_card(col, label, value, subtext):
@@ -227,9 +292,22 @@ def render_summary_card(col, label, value, subtext):
         </div>
         """, unsafe_allow_html=True)
 
-render_summary_card(m1, "Tracked Markets", len(df), "Total African markets analyzed")
-render_summary_card(m2, "Viable Inference Hubs", viable_mkts, "Ready for immediate deployment")
-render_summary_card(m3, "Markets w/ Local GPU", gpu_mkts, "Confirmed H100/A100 availability")
+if is_policy_mode:
+    # Policy Metrics
+    strong_policy = len(df[df['ai_policy_signal'] == 'Strong'])
+    data_open = len(df[df['ai_data_governance_posture'] == 'Flexible'])
+    explicit_compute = len(df[df['ai_compute_policy_commitment'] == 'Explicit'])
+    
+    render_summary_card(m1, "Markets w/ AI Strategy", strong_policy, "Official strategy + execution signals")
+    render_summary_card(m2, "Flexible Data Governance", data_open, "Supportive of AI data flows")
+    render_summary_card(m3, "Compute Commitment", explicit_compute, "Explicit state-backed infrastructure")
+else:
+    # Founder Metrics (v1)
+    viable_mkts = len(df[df['ai_inference_readiness'] == 'Viable'])
+    gpu_mkts = len(df[df['ai_compute_availability'].str.contains('GPU', case=False, na=False)])
+    render_summary_card(m1, "Tracked Markets", len(df), "Total African markets analyzed")
+    render_summary_card(m2, "Viable Inference Hubs", viable_mkts, "Ready for immediate deployment")
+    render_summary_card(m3, "Markets w/ Local GPU", gpu_mkts, "Confirmed H100/A100 availability")
 
 st.markdown("---")
 
@@ -255,21 +333,32 @@ with col_details:
         st.rerun()
 
     country_data = df[df["country"] == st.session_state.selected_country].iloc[0]
-    
-    # Details Panel
-    readiness = country_data['ai_inference_readiness']
-    badge_class = "badge-viable" if "Viable" in readiness else ("badge-early" if "Early" in readiness else "badge-emerging")
-    
+
+    # Details Panel - Dynamic Content
+    if is_policy_mode:
+        status_label = "Policy Signal"
+        status_value = country_data['ai_policy_signal']
+        badge_style = "badge-strong" if status_value == "Strong" else ("badge-unclear" if status_value == "Unclear" else "badge-emerging")
+        insight_label = "Policy Insight"
+        # Dynamic insight text based on data points since separate column missing
+        insight_text = f"National policy signal is {status_value} with {country_data['ai_data_governance_posture'].lower()} data governance frameworks."
+    else:
+        status_label = "Readiness Status"
+        status_value = safe(country_data.get('ai_inference_readiness'))
+        badge_style = "badge-viable" if "Viable" in status_value else ("badge-early" if "Early" in status_value else "badge-emerging")
+        insight_label = "Founder Insight"
+        insight_text = safe(country_data.get('founder_insight'), "Founder insight not yet documented.")
+
     st.markdown(f"""
         <div style="margin-top: 20px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: white;">
-            <div class="metric-label">Current Status</div>
+            <div class="metric-label">{status_label}</div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px;">
                 <h2 style="margin:0; color: #0f172a;">{st.session_state.selected_country}</h2>
-                <span class="badge {badge_class}">{readiness}</span>
+                <span class="badge {badge_style}">{status_value}</span>
             </div>
             <hr style="margin: 15px 0;">
-            <div class="metric-label" style="margin-bottom:4px;">Founder Insight</div>
-            <div class="insight-box">"{country_data['founder_insight']}"</div>
+            <div class="metric-label" style="margin-bottom:4px;">{insight_label}</div>
+            <div class="insight-box">"{insight_text}"</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -284,7 +373,7 @@ with col_map:
         zoom=5.2, pitch=45.0, bearing=0
     )
 
-    # 1. Path Layer
+    # 1. Path Layer (Same for both modes, context useful in both)
     EU_HUB = {"lat": 43.0, "lon": 3.0}
     REGIONAL_HUBS = {
         "East": {"lat": -1.286389, "lon": 36.817223},
@@ -308,13 +397,15 @@ with col_map:
         get_color=[60, 120, 216], opacity=0.5, pickable=False
     )
 
-    # 2. Base Scatter Layer
+    # 2. Base Scatter Layer - COLOR SWAPS HERE
+    active_color_col = "color_policy" if is_policy_mode else "color_founder"
+    
     scatter_layer = pdk.Layer(
         "ScatterplotLayer",
         id="base-scatter",
         data=df,
         get_position=["longitude", "latitude"],
-        get_fill_color="color",
+        get_fill_color=active_color_col, # Dynamic Color Column
         get_radius="radius",
         get_line_color=[255, 255, 255],
         get_line_width=2,
@@ -340,12 +431,14 @@ with col_map:
         radius_scale=1.2, radius_min_pixels=15, pickable=False
     )
 
+    tooltip_html = "<b>{country}</b><br/>Policy Signal: {ai_policy_signal}" if is_policy_mode else "<b>{country}</b><br/>Status: {ai_inference_readiness}"
+
     deck = pdk.Deck(
         map_style=map_style,
         api_keys={"mapbox": MAPBOX_TOKEN} if MAPBOX_TOKEN else None,
         layers=[path_layer, scatter_layer, halo_layer],
         initial_view_state=view_state,
-        tooltip={"html": "<b>{country}</b><br/>Status: {ai_inference_readiness}"},
+        tooltip={"html": tooltip_html},
     )
     
     event = st.pydeck_chart(
@@ -353,7 +446,7 @@ with col_map:
         width="stretch",
         selection_mode="single-object", 
         on_select="rerun",
-        key=f"map_{st.session_state.selected_country}"
+        key=f"map_{st.session_state.selected_country}_{view_mode}" # Add view_mode to key to force refresh on toggle
     )
     
     # Handle Map Selection
@@ -367,61 +460,68 @@ with col_map:
                 st.rerun()
 
 # --------------------
-# 7. Legend (Moved)
+# 7. Legend (Dynamic)
 # --------------------
-# Visual Legend Strip (Sexier Display)
-st.markdown("""
-<div class="legend-strip">
-    <div class="legend-item">
-        <span class="legend-icon">🟢</span>
-        <div>
-            <strong>Readiness</strong><br>
-            <span style="font-size:0.8em; color:#6b7280;">Dot Size & Color</span>
+if is_policy_mode:
+    legend_html = """
+    <div class="legend-strip">
+        <div class="legend-item">
+            <span class="legend-icon" style="color: #1e40af;">🔵</span>
+            <div><strong>Strong Signal</strong><br><span style="font-size:0.8em; color:#6b7280;">Explicit AI Strategy</span></div>
+        </div>
+        <div class="legend-item">
+            <span class="legend-icon" style="color: #60a5fa;">💠</span>
+            <div><strong>Emerging</strong><br><span style="font-size:0.8em; color:#6b7280;">Drafts / Task Forces</span></div>
+        </div>
+        <div class="legend-item">
+            <span class="legend-icon">⭕</span>
+            <div><strong>Selection</strong><br><span style="font-size:0.8em; color:#6b7280;">Cyan Ring = Active</span></div>
         </div>
     </div>
-    <div class="legend-item">
-        <span class="legend-icon">🔵</span>
-        <div>
-            <strong>Routing</strong><br>
-            <span style="font-size:0.8em; color:#6b7280;">Blue Lines = Data Flow</span>
+    """
+else:
+    legend_html = """
+    <div class="legend-strip">
+        <div class="legend-item">
+            <span class="legend-icon">🟢</span>
+            <div><strong>Readiness</strong><br><span style="font-size:0.8em; color:#6b7280;">Dot Size & Color</span></div>
+        </div>
+        <div class="legend-item">
+            <span class="legend-icon">🔵</span>
+            <div><strong>Routing</strong><br><span style="font-size:0.8em; color:#6b7280;">Blue Lines = Data Flow</span></div>
+        </div>
+        <div class="legend-item">
+            <span class="legend-icon">⭕</span>
+            <div><strong>Selection</strong><br><span style="font-size:0.8em; color:#6b7280;">Cyan Ring = Active</span></div>
         </div>
     </div>
-    <div class="legend-item">
-        <span class="legend-icon">⭕</span>
-        <div>
-            <strong>Selection</strong><br>
-            <span style="font-size:0.8em; color:#6b7280;">Cyan Ring = Active</span>
-        </div>
-    </div>
-    <div class="legend-item">
-        <span class="legend-icon">🎯</span>
-        <div>
-            <strong>Scope</strong><br>
-            <span style="font-size:0.8em; color:#6b7280;">Inference Only (Not Training)</span>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+    """
+st.markdown(legend_html, unsafe_allow_html=True)
 
 # --------------------
 # 8. Deep Dive Grid
 # --------------------
 st.markdown("### 🔍 Infrastructure Deep Dive")
 
-# Definitions for our metrics
+# Combined Definitions
 definitions = {
-    "Inference Route": "Where the AI model actually runs. 'Local' means it runs in-country. 'Hybrid' or 'Regional' means it routes to a nearby hub (e.g., South Africa) or Europe.",
-    "Latency to Europe": "Round-trip time (RTT) to major EU cloud hubs. <60ms is excellent; >150ms makes real-time voice/video AI difficult.",
-    "Compute Availability": "Does the local market have GPU capacity (H100/A100s) or just CPUs? Critical for heavy model inference.",
-    "Readiness Status": "Overall score combining power, compute, and policy. Viable = Enterprise Ready; Emerging = Risky but possible.",
+    # Founder Mode
+    "Inference Route": "Where the AI model actually runs. 'Local' means it runs in-country. 'Hybrid' routes to a regional hub.",
+    "Latency to Europe": "Round-trip time (RTT) to major EU cloud hubs. Critical for real-time voice/video AI.",
+    "Compute Availability": "Local availability of GPU capacity (H100/A100s) versus CPU-only infrastructure.",
+    "Readiness Status": "Overall score combining power, compute, and policy for deployment feasibility.",
     "Active Data Centers": "Number of operational, enterprise-grade facilities (Tier III equivalent).",
-    "Power Reliability": "Stability of the grid. Frequent outages force reliance on expensive diesel generators, increasing costs.",
+    "Power Reliability": "Grid stability. Frequent outages force reliance on diesel, increasing inference costs.",
     "Cloud Maturity": "Presence of Hyperscalers (AWS/Azure) or strong local cloud providers.",
-    "Ops Friction": "Difficulty of doing business: payments, cross-border data laws, or lack of local support."
+    "Ops Friction": "Difficulty of doing business: payments, cross-border data laws, or support.",
+    # Policy Mode
+    "AI Policy Signal": "Directional strength of national AI strategy. Strong = Clear framework; Unclear = No visible posture.",
+    "Data Governance": "Legal treatment of AI data. Flexible = Innovation friendly; Restricted = Sovereignty focused.",
+    "Compute Commitment": "Whether the state treats AI compute as strategic national infrastructure.",
+    "Cross-Border Alignment": "Openness to cross-border data flows essential for regional inference."
 }
 
 with st.container():
-    # Helper to render metric card with CSS Tooltip
     def render_card(col, label, value, subtext=None):
         tooltip_text = definitions.get(label, "No definition available.")
         with col:
@@ -440,17 +540,35 @@ with st.container():
             """, unsafe_allow_html=True)
 
     c1, c2, c3, c4 = st.columns(4)
-    render_card(c1, "Inference Route", country_data['primary_inference_route'])
-    render_card(c2, "Latency to Europe (RTT)", f"{country_data['est_rtt_to_europe_ms']} ms")
-    render_card(c3, "Compute Availability", country_data['ai_compute_availability'])
-    render_card(c4, "Readiness Status", country_data['ai_inference_readiness'])
+    
+    if is_policy_mode:
+        # Policy Mode Cards
+        render_card(c1, "AI Policy Signal", country_data['ai_policy_signal'])
+        render_card(c2, "Data Governance", country_data['ai_data_governance_posture'])
+        render_card(c3, "Compute Commitment", country_data['ai_compute_policy_commitment'])
+        render_card(c4, "Cross-Border Alignment", country_data['cross_border_ai_alignment'])
 
-    st.write("") 
-    c5, c6, c7, c8 = st.columns(4)
-    render_card(c5, "Active Data Centers", country_data['active_data_centers'], f"Pipeline: {country_data['dc_pipeline']}")
-    render_card(c6, "Power Reliability", country_data['power_reliability'])
-    render_card(c7, "Cloud Maturity", country_data['cloud_maturity'])
-    render_card(c8, "Ops Friction", country_data['ops_friction'])
+        st.write("") # Row Break
+        # Just 4 cards for Policy Mode v2 for now, or repeat relevant ones
+        c5, c6, c7, c8 = st.columns(4)
+        render_card(c5, "Active Data Centers", country_data['active_data_centers'], "(Context)")
+        render_card(c6, "Power Reliability", safe(country_data.get('power_reliability')), "(Context)")
+        render_card(c7, "Cloud Maturity", safe(country_data.get('cloud_maturity')), "(Context)")
+        render_card(c8, "Ops Friction", safe(country_data.get('ops_friction')), "(Context)")
+    else:
+        # Founder Mode Cards (v1)
+        render_card(c1, "Inference Route", safe(country_data.get('primary_inference_route')))
+        render_card(c2, "Latency to Europe (RTT)", f"{safe(country_data.get('est_rtt_to_europe_ms'), 'N/A')} ms")
+        render_card(c3, "Compute Availability", safe(country_data.get('ai_compute_availability')))
+        render_card(c4, "Readiness Status", safe(country_data.get('ai_inference_readiness')))
+
+        st.write("")
+        c5, c6, c7, c8 = st.columns(4)
+        render_card(c5, "Active Data Centers", country_data['active_data_centers'], f"Pipeline: {country_data['dc_pipeline']}")
+        render_card(c6, "Power Reliability", safe(country_data.get('power_reliability')))
+        render_card(c7, "Cloud Maturity", safe(country_data.get('cloud_maturity')))
+        render_card(c8, "Ops Friction", safe(country_data.get('ops_friction')))
 
 st.markdown("---")
-st.caption("v1 visualises AI inference paths. This tool does not rank countries. It reflects deployment feasibility for AI inference based on power, compute access, and operational friction")
+caption_text = "v2 Policy Mode: Signals are directional and based on public strategy documents." if is_policy_mode else "v1 Founder Mode: Focuses on deployment reality and infrastructure readiness."
+st.caption(caption_text)
