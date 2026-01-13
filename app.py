@@ -114,7 +114,7 @@ with col2:
     st.markdown(f"**Power Reliability:** {country['power_reliability']}")
     st.markdown(f"**Ops Friction:** {country['ops_friction']}")
     st.markdown(f"**Data Residency Constraint:** {country['data_residency_constraint']}")
-    st.markdown(f"### Inference Reality")
+    st.markdown(f"### Inference Context")
     st.markdown(f"**Primary Inference Route:** {country['primary_inference_route']}")
     st.markdown(f"**Estimated RTT to Europe:** {country['est_rtt_to_europe_ms']} ")
 st.markdown("### Founder Insight")
