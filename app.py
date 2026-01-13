@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("AI Inference Readiness Map — Africa (v0)")
+st.title("AI Inference Readiness Map — Africa (v0.7)")
 st.caption(
     "Founder-facing decision-support tool showing where AI inference workloads "
     "can realistically be deployed across Africa today."
@@ -114,12 +114,14 @@ with col2:
     st.markdown(f"**Power Reliability:** {country['power_reliability']}")
     st.markdown(f"**Ops Friction:** {country['ops_friction']}")
     st.markdown(f"**Data Residency Constraint:** {country['data_residency_constraint']}")
-
+    st.markdown(f"### Inference Reality")
+    st.markdown(f"**Primary Inference Route:** {country['primary_inference_route']}")
+    st.markdown(f"**Estimated RTT to Europe:** {country['est_rtt_to_europe_ms']} ")
 st.markdown("### Founder Insight")
 st.info(country["founder_insight"])
 
 st.markdown("---")
 st.caption(
-    "v0 focuses on AI inference feasibility (not training capacity). "
+    "v0.7 focuses on AI inference feasibility (not training capacity). "
     "Data is directional and intended to support early-stage deployment decisions."
 )
